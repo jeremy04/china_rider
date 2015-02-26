@@ -1,0 +1,10 @@
+{
+  "appName": {
+    "message": "china_rider",
+    "description": "The name of the application"
+  },
+  "appDescription": {
+    "message": "Archive.org dead stream downloader",
+    "description": "The description of the application"
+  }
+}
