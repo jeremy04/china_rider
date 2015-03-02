@@ -11,6 +11,28 @@ Dual licenced under the MIT license or GPLv3. See https://raw.github.com/Stuk/js
 'use strict';
 
 var JSZipUtils = {};
+
+var xhr_requests = {};
+
+JSZipUtils.updatePercent = function(url, percent) {
+    xhr_requests[url] = percent;
+};
+
+JSZipUtils.getPercents = function() {
+    return xhr_requests;
+}
+
+JSZipUtils.getTotalPercent = function() {
+
+    var array = $.map(JSZipUtils.getPercents(), function(value, index) {
+        return [value];
+    });
+
+    var sum = array.reduce(function(a,b){ return a + b; });
+    return Math.floor((sum / array.length) * 100);
+
+}
+
 // just use the responseText with xhr1, response with xhr2.
 // The transformation doesn't throw away high-order byte (with responseText)
 // because JSZip handles that case. If not used with JSZip, you may need to
@@ -23,8 +45,25 @@ JSZipUtils._getBinaryFromXHR = function (xhr) {
 // taken from jQuery
 function createStandardXHR() {
     try {
-        return new window.XMLHttpRequest();
+        var oReq = new window.XMLHttpRequest();
+        oReq.addEventListener("progress", updateProgress, false);
+        return oReq;
     } catch( e ) {}
+}
+
+function updateProgress (oEvent) {
+  if (oEvent.lengthComputable) {
+    var percentComplete = oEvent.loaded / oEvent.total;
+    var oldPercent = JSZipUtils.getTotalPercent();
+    JSZipUtils.updatePercent(oEvent.target._url, percentComplete);
+    var newPercent = JSZipUtils.getTotalPercent();
+    if (newPercent > oldPercent) {
+        $("#progress").text("Compressing: " + JSZipUtils.getTotalPercent() + "%");
+    }
+
+  } else {
+    // Unable to compute progress information since the total size is unknown
+  }
 }
 
 function createActiveXHR() {
@@ -66,7 +105,16 @@ JSZipUtils.getBinaryContent = function(path, callback) {
      */
     try {
 
+        /* ugh */
+        var xhrProto = XMLHttpRequest.prototype, origOpen = xhrProto.open;
+        xhrProto.open = function (method, url) {
+            this._url = url;
+            return origOpen.apply(this, arguments);
+        };
+        /* ugh */
+
         var xhr = createXHR();
+        xhr_requests[path] = 0;
 
         xhr.open('GET', path, true);
 
