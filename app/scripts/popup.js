@@ -4,18 +4,55 @@ console.log('Popup');
 
 
 $(function() {
+
+  var xhr_requests = {};
   
+  function doProgress(oEvent) {
+    if (oEvent.lengthComputable) {
+      var percentComplete = oEvent.loaded / oEvent.total;
+      var oldPercent = getTotalPercent();
+      updatePercent(oEvent.target.responseURL, percentComplete);
+      var newPercent = getTotalPercent();
+      if (newPercent > oldPercent) {
+        document.getElementById("progress").innerHTML = "Compressing " + getTotalPercent() + " % ";
+      }   
+      
+    }
+  
+    function updatePercent(url, percent) {
+      xhr_requests[url] = percent;
+    }
+
+    function getPercents() {
+      return xhr_requests;
+    }
+
+    function getTotalPercent() {
+
+      var array = _.map(getPercents(), function(value, index) {
+          return value;
+      });
+
+      var sum = _.reduce(array, function(a,b){ return a + b; }, 0);
+      return Math.floor((sum / array.length) * 100);
+
+    }
+    
+  }
+
+  function startDownload(err, data) {
+      if(err) {
+          deferred.reject(err);
+          console.log("Ahh Craig ");
+      } else {
+          zip.file(filename, data, {binary:true});
+          deferred.resolve(data);
+      }
+    }
+
   function deferredAddZip(url, filename, zip) {
     var deferred = $.Deferred();
-    JSZipUtils.getBinaryContent(url, function (err, data) {
-        if(err) {
-            deferred.reject(err);
-            alert("error dude" + err);
-        } else {
-            zip.file(filename, data, {binary:true});
-            deferred.resolve(data);
-        }
-    });
+    JSZipUtils.getBinaryContent(url, startDownload, doProgress);
     return deferred;
   }
 
