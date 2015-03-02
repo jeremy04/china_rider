@@ -12,113 +12,13 @@ Dual licenced under the MIT license or GPLv3. See https://raw.github.com/Stuk/js
 
 var JSZipUtils = {};
 
-var xhr_requests = {};
-
-JSZipUtils.updatePercent = function(url, percent) {
-    xhr_requests[url] = percent;
-};
-
-JSZipUtils.getPercents = function() {
-    return xhr_requests;
-}
-
-JSZipUtils.getTotalPercent = function() {
-
-    var array = $.map(JSZipUtils.getPercents(), function(value, index) {
-        return [value];
-    });
-
-    var sum = array.reduce(function(a,b){ return a + b; });
-    return Math.floor((sum / array.length) * 100);
-
-}
-
-// just use the responseText with xhr1, response with xhr2.
-// The transformation doesn't throw away high-order byte (with responseText)
-// because JSZip handles that case. If not used with JSZip, you may need to
-// do it, see https://developer.mozilla.org/En/Using_XMLHttpRequest#Handling_binary_data
-JSZipUtils._getBinaryFromXHR = function (xhr) {
-    // for xhr.responseText, the 0xFF mask is applied by JSZip
-    return xhr.response || xhr.responseText;
-};
-
-// taken from jQuery
-function createStandardXHR() {
-    try {
-        var oReq = new window.XMLHttpRequest();
-        oReq.addEventListener("progress", updateProgress, false);
-        return oReq;
-    } catch( e ) {}
-}
-
-function updateProgress (oEvent) {
-  if (oEvent.lengthComputable) {
-    var percentComplete = oEvent.loaded / oEvent.total;
-    var oldPercent = JSZipUtils.getTotalPercent();
-    JSZipUtils.updatePercent(oEvent.target._url, percentComplete);
-    var newPercent = JSZipUtils.getTotalPercent();
-    if (newPercent > oldPercent) {
-        $("#progress").text("Compressing: " + JSZipUtils.getTotalPercent() + "%");
-    }
-
-  } else {
-    // Unable to compute progress information since the total size is unknown
-  }
-}
-
-function createActiveXHR() {
-    try {
-        return new window.ActiveXObject("Microsoft.XMLHTTP");
-    } catch( e ) {}
-}
-
-// Create the request object
-var createXHR = window.ActiveXObject ?
-    /* Microsoft failed to properly
-     * implement the XMLHttpRequest in IE7 (can't request local files),
-     * so we use the ActiveXObject when it is available
-     * Additionally XMLHttpRequest can be disabled in IE7/IE8 so
-     * we need a fallback.
-     */
-    function() {
-    return createStandardXHR() || createActiveXHR();
-} :
-    // For all other browsers, use the standard XMLHttpRequest object
-    createStandardXHR;
-
-
-
-JSZipUtils.getBinaryContent = function(path, callback) {
-    /*
-     * Here is the tricky part : getting the data.
-     * In firefox/chrome/opera/... setting the mimeType to 'text/plain; charset=x-user-defined'
-     * is enough, the result is in the standard xhr.responseText.
-     * cf https://developer.mozilla.org/En/XMLHttpRequest/Using_XMLHttpRequest#Receiving_binary_data_in_older_browsers
-     * In IE <= 9, we must use (the IE only) attribute responseBody
-     * (for binary data, its content is different from responseText).
-     * In IE 10, the 'charset=x-user-defined' trick doesn't work, only the
-     * responseType will work :
-     * http://msdn.microsoft.com/en-us/library/ie/hh673569%28v=vs.85%29.aspx#Binary_Object_upload_and_download
-     *
-     * I'd like to use jQuery to avoid this XHR madness, but it doesn't support
-     * the responseType attribute : http://bugs.jquery.com/ticket/11461
-     */
+JSZipUtils.getBinaryContent = function(path, callback, updateProgress) {
     try {
 
-        /* ugh */
-        var xhrProto = XMLHttpRequest.prototype, origOpen = xhrProto.open;
-        xhrProto.open = function (method, url) {
-            this._url = url;
-            return origOpen.apply(this, arguments);
-        };
-        /* ugh */
-
-        var xhr = createXHR();
-        xhr_requests[path] = 0;
-
+        var xhr = new window.XMLHttpRequest();
+        xhr.addEventListener("progress", updateProgress, false);
         xhr.open('GET', path, true);
 
-        // recent browsers
         if ("responseType" in xhr) {
             xhr.responseType = "arraybuffer";
         }
@@ -130,18 +30,18 @@ JSZipUtils.getBinaryContent = function(path, callback) {
 
         xhr.onreadystatechange = function(evt) {
             var file, err;
-            // use `xhr` and not `this`... thanks IE
             if (xhr.readyState === 4) {
                 if (xhr.status === 200 || xhr.status === 0) {
                     file = null;
                     err = null;
                     try {
-                        file = JSZipUtils._getBinaryFromXHR(xhr);
+                        file = xhr.response;
                     } catch(e) {
                         err = new Error(e);
                     }
                     callback(err, file);
                 } else {
+                    /* AHHH CALLBACK HELLLLLL */
                     callback(new Error("Ajax error for " + path + " : " + this.status + " " + this.statusText), null);
                 }
             }
